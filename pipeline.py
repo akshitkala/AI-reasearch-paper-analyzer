@@ -59,7 +59,7 @@ def handle_ai_errors(func):
 def get_files_text(uploaded_files):
     combined_text = ""
     file_stats = []
-    
+
     for file in uploaded_files:
         file_text = ""
         try:
@@ -78,41 +78,55 @@ def get_files_text(uploaded_files):
             else:
                 st.warning(f"Unsupported file format: {file.name}")
                 continue
-                
+
             if file_text:
-                combined_text += file_text
-                # Build file stats
-                word_count = len(file_text.split())
-                char_count = len(file_text)
+                # ── Wrap each document with a clear boundary marker so the
+                #    chunker and the LLM always know which paper they are reading
+                doc_name = file.name
+                separator = (
+                    f"\n\n{'='*80}\n"
+                    f"DOCUMENT: {doc_name}\n"
+                    f"{'='*80}\n\n"
+                )
+                combined_text += separator + file_text
+
+                word_count     = len(file_text.split())
+                char_count     = len(file_text)
                 sentence_count = len(re.split(r'[.!?]+', file_text))
-                
+
                 file_stats.append({
-                    "name": file.name,
-                    "text": file_text,
-                    "word_count": word_count,
-                    "char_count": char_count,
-                    "sentence_count": sentence_count
+                    "name":           doc_name,
+                    "text":           file_text,
+                    "word_count":     word_count,
+                    "char_count":     char_count,
+                    "sentence_count": sentence_count,
                 })
         except Exception as e:
             st.error(f"Error reading {file.name}: {str(e)}")
             continue
-            
-    # Store in session state as requested
-    st.session_state.file_stats = file_stats
+
+    # Store in session state
+    st.session_state.file_stats    = file_stats
     st.session_state.combined_text = combined_text
-    
+
     return combined_text
 
 # Function to split the extracted text into manageable chunks
 def get_text_chunks(text):
     if not text:
         return []
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=2000,
+        chunk_overlap=200,
+        # Keep the DOCUMENT: separator together with content so source context
+        # is preserved inside the chunk whenever possible
+        separators=["\n\n" + "=" * 80, "\n\n", "\n", " ", ""],
+    )
     chunks = text_splitter.split_text(text)
-    
+
     # Store total chunks in session state
     st.session_state.total_chunks = len(chunks)
-    
+
     return chunks
 
 # Function to generate vector embeddings from text chunks and store them in a FAISS index
@@ -126,58 +140,72 @@ def get_vector_store(text_chunks):
         return
         
     embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/gemini-embedding-001", 
+        model="models/gemini-embedding-001",
         google_api_key=google_api_key,
-        task_type="retrieval_document"
+        task_type="retrieval_document",
     )
-    
-    # Smart Batched Embeddings (Resolves rate limiting and length mismatch)
+
+    # ── Derive per-chunk source document names from boundary markers ────────────
+    # Each chunk that contains "DOCUMENT: <name>" belongs to that paper;
+    # otherwise inherit from the preceding chunk.
+    def _infer_source(chunk_text: str, prev_source: str) -> str:
+        match = re.search(r"DOCUMENT:\s*(.+)", chunk_text)
+        return match.group(1).strip() if match else prev_source
+
+    chunk_sources: list[str] = []
+    current_source = "Unknown"
+    for chunk in text_chunks:
+        current_source = _infer_source(chunk, current_source)
+        chunk_sources.append(current_source)
+
+    # Smart Batched Embeddings (resolves rate limiting and length mismatch)
     embedded_docs = []
-    batch_size = 5
-    progress_bar = st.progress(0, text="Generating embeddings...")
-    
+    batch_size    = 5
+    progress_bar  = st.progress(0, text="Generating embeddings...")
+
     for i in range(0, len(text_chunks), batch_size):
         batch = text_chunks[i:i + batch_size]
         try:
-            # Try batch embedding first (efficient)
             batch_embeddings = embeddings.embed_documents(batch)
             embedded_docs.extend(batch_embeddings)
         except Exception:
-            # Fallback to individual embedding if batch fails
             for chunk in batch:
                 embedded_docs.append(embeddings.embed_query(chunk))
-                time.sleep(0.5) # Prevent rate limit
-        
+                time.sleep(0.5)
+
         progress = min((i + batch_size) / len(text_chunks), 1.0)
-        progress_bar.progress(progress, text=f"Processing batch {i//batch_size + 1}...")
-    
+        progress_bar.progress(progress, text=f"Processing batch {i // batch_size + 1}...")
+
     progress_bar.empty()
-        
-    # Create the FAISS index using the manual embeddings
-    # Added metadata to support chunk retrieval map
+
+    # Build FAISS index — tag every chunk with both its index AND its source doc
     vector_store = FAISS.from_embeddings(
         text_embeddings=list(zip(text_chunks, embedded_docs)),
         embedding=embeddings,
-        metadatas=[{"chunk_index": i} for i in range(len(text_chunks))]
+        metadatas=[
+            {"chunk_index": i, "source": chunk_sources[i]}
+            for i in range(len(text_chunks))
+        ],
     )
-    # Save the FAISS index locally for later retrieval
     vector_store.save_local("faiss_index")
     return True
 
 # ── Shared prompt template ──────────────────────────────────────────────────────
-_PROMPT_TEMPLATE = """
-Answer the question as detailed as possible from the provided context, make sure to provide all the details.
-If the answer is not found in the provided documents, just say, "Answer not found in the provided documents",
-don't provide the wrong answer.
-
-Context:
-{context}
-
-Question:
-{input}
-
-Answer:
-"""
+# NOTE: Keep this concise and instruction-free of bullet lists — Llama models
+# tend to echo verbose instruction formats back into their answers, which
+# triggers Groq’s loop-detection filter.
+_PROMPT_TEMPLATE = (
+    "You are an expert research analyst. Use ONLY the context below to answer "
+    "the question. When the context contains multiple documents (each prefixed "
+    "with [Source: filename]), compare and contrast findings across all of them "
+    "and cite sources inline like (Source: filename). "
+    "If the answer is not in the context, say: "
+    "'Answer not found in the provided documents.' "
+    "Do not repeat these instructions in your answer.\n\n"
+    "Context:\n{context}\n\n"
+    "Question: {input}\n\n"
+    "Answer:"
+)
 
 def _build_chain(model):
     """Build a stuff-documents chain from any LangChain chat model."""
@@ -198,8 +226,13 @@ def get_conversational_chain(use_groq: bool = False):
             raise ValueError("GROQ_API_KEY is not set in your environment.")
         model = ChatGroq(
             model="llama-3.3-70b-versatile",
-            temperature=0.3,
+            temperature=0.5,          # slightly higher = more varied, less loopy
             api_key=groq_api_key,
+            max_tokens=2048,           # hard cap prevents runaway generation
+            model_kwargs={
+                "frequency_penalty": 0.6,   # penalise repeated tokens strongly
+                "presence_penalty":  0.4,   # encourage novel tokens
+            },
         )
     else:
         model = ChatGoogleGenerativeAI(
@@ -225,10 +258,17 @@ def user_input(user_question):
     # Load the FAISS index from local storage
     new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
 
-    # Perform a similarity search in the FAISS index based on the user's question
-    docs = new_db.similarity_search(user_question)
+    # Fetch more candidates when multiple docs are loaded so each paper is
+    # represented; then store retrieved indices for the chunk heatmap
+    num_docs = len(st.session_state.get("file_stats", []))
+    k        = max(6, num_docs * 3)   # at least 3 chunks per document
+    docs     = new_db.similarity_search(user_question, k=k)
 
-    # Store retrieved indices for the chunk heatmap
+    # Annotate every retrieved Document with its source so the LLM sees it
+    for doc in docs:
+        src = doc.metadata.get("source", "Unknown")
+        doc.page_content = f"[Source: {src}]\n{doc.page_content}"
+
     st.session_state.retrieved_chunks = [
         int(doc.metadata.get("chunk_index", 0))
         for doc in docs if doc.metadata
@@ -267,10 +307,20 @@ def user_input(user_question):
 
     # ── Fallback: Groq ───────────────────────────────────────────────────────────
     try:
-        chain = get_conversational_chain(use_groq=True)
+        chain    = get_conversational_chain(use_groq=True)
         response = chain.invoke({"context": docs, "input": user_question})
         st.session_state.chat_history.append((user_question, response))
 
-    except Exception as e:
-        st.error(f"🤖 **Groq Fallback Error:** {str(e)}")
+    except Exception as groq_err:
+        err_msg = str(groq_err)
+        # Groq loop-detection: retry once with fewer context chunks
+        if "looping content" in err_msg.lower() and len(docs) > 2:
+            try:
+                trimmed_docs = docs[:2]   # drastically fewer chunks
+                response = chain.invoke({"context": trimmed_docs, "input": user_question})
+                st.session_state.chat_history.append((user_question, response))
+                return
+            except Exception as retry_err:
+                err_msg = str(retry_err)
+        st.error(f"🤖 **Groq Fallback Error:** {err_msg}")
         return

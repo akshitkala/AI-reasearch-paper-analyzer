@@ -193,95 +193,168 @@ def citation_year_timeline(text):
 # --- AI-Powered Deep Analysis Cards ---
 
 def _get_ai_response(user_input_fn, query):
-    """Helper to get AI response via the pipeline without cluttering chat history"""
+    """Helper to get AI response via the pipeline without cluttering chat history."""
     user_input_fn(query)
     if st.session_state.chat_history:
-        # Get the response and remove it from the visual chat history
         query_text, response = st.session_state.chat_history.pop()
         return response
     return "No response received."
 
+
+def _doc_chips(doc_names: list[str]):
+    """Render small document-name chips above an analysis result."""
+    chips_html = "".join(
+        f'<span style="display:inline-block;margin:0 6px 6px 0;padding:3px 10px;'
+        f'font-size:11px;font-weight:600;border-radius:99px;'
+        f'background:rgba(124,111,236,0.12);border:1px solid rgba(124,111,236,0.25);'
+        f'color:#a78bfa;">{doc}</span>'
+        for doc in doc_names
+    )
+    st.markdown(
+        f'<div style="margin-bottom:10px">{chips_html}</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def methodology_card(user_input_fn, doc_names):
     st.markdown("### 🛠️ Methodology Comparison")
-    query = "What research methodology, approach, and technical pipeline does each document use? List them separately per document."
+    _doc_chips(doc_names)
+    n = len(doc_names)
+    docs_clause = ", ".join(f'"{d}"' for d in doc_names)
+    query = (
+        f"Compare the research methodology, technical approach, and pipeline used in "
+        f"each of the {n} documents ({docs_clause}). "
+        "For each document write a separate paragraph starting with the document name in bold. "
+        "Then write a brief comparative summary highlighting key similarities and differences."
+    )
     response = _get_ai_response(user_input_fn, query)
-    
-    cols = st.columns(len(doc_names))
-    for i, doc in enumerate(doc_names):
-        with cols[i]:
-            st.info(f"**{doc}**")
-            st.markdown(response)
+    st.markdown(response)
+
 
 def contributions_card(user_input_fn, doc_names):
     st.markdown("### 🏆 Key Contributions & Novelty")
-    query = "What are the key contributions, novel ideas, and unique claims made in each document? List separately per document."
+    _doc_chips(doc_names)
+    n = len(doc_names)
+    docs_clause = ", ".join(f'"{d}"' for d in doc_names)
+    query = (
+        f"What are the key contributions, novel ideas, and unique claims in each of "
+        f"the {n} documents ({docs_clause})? "
+        "For each document write a separate paragraph starting with the document name in bold. "
+        "End with a short cross-document comparison of novelty."
+    )
     response = _get_ai_response(user_input_fn, query)
-    
-    cols = st.columns(len(doc_names))
-    for i, doc in enumerate(doc_names):
-        with cols[i]:
-            st.success(f"**{doc}**")
-            st.markdown(response)
+    st.markdown(response)
+
 
 def limitations_card(user_input_fn, doc_names):
     st.markdown("### ⚠️ Limitations & Research Gaps")
-    query = "What limitations, shortcomings, or future work does each document mention or imply? List separately per document."
+    _doc_chips(doc_names)
+    n = len(doc_names)
+    docs_clause = ", ".join(f'"{d}"' for d in doc_names)
+    query = (
+        f"What limitations, shortcomings, or future-work directions does each of the "
+        f"{n} documents ({docs_clause}) mention or imply? "
+        "For each document write a separate paragraph starting with the document name in bold. "
+        "Then compare whether the limitations are complementary or overlapping across documents."
+    )
     response = _get_ai_response(user_input_fn, query)
-    
-    st.warning("Analysis of Stated Limitations vs Implied Gaps")
     st.markdown(response)
+
 
 def techstack_card(user_input_fn, doc_names):
     st.markdown("### 💻 Tech Stack & Tools")
-    query = "List all frameworks, tools, datasets, algorithms, and evaluation metrics mentioned in each document. Separate by document. Categories: Frameworks, Datasets, Algorithms, Metrics."
+    _doc_chips(doc_names)
+    n = len(doc_names)
+    docs_clause = ", ".join(f'"{d}"' for d in doc_names)
+    query = (
+        f"List all frameworks, tools, datasets, algorithms, and evaluation metrics "
+        f"used in each of the {n} documents ({docs_clause}). "
+        "Group results by document (bold heading), then add a comparison row noting "
+        "which tools are shared and which are unique to each paper."
+    )
     response = _get_ai_response(user_input_fn, query)
-    
     st.markdown(response)
+
 
 def quality_scorecard(user_input_fn, doc_names):
     st.markdown("### 📊 Research Quality Scorecard")
-    query = "Rate each document on: clarity of problem statement, novelty of approach, evaluation rigor, reproducibility, and practical applicability. Give a score out of 10 for each dimension with a one-line justification."
+    _doc_chips(doc_names)
+    n = len(doc_names)
+    docs_clause = ", ".join(f'"{d}"' for d in doc_names)
+    query = (
+        f"Rate each of the {n} documents ({docs_clause}) on five dimensions: "
+        "clarity of problem statement, novelty of approach, evaluation rigor, "
+        "reproducibility, and practical applicability. "
+        "Give a score X/10 for each dimension with one-line justification. "
+        "Format: DocumentName | Clarity X/10 | Novelty X/10 | Rigor X/10 | "
+        "Reproducibility X/10 | Applicability X/10."
+    )
     response = _get_ai_response(user_input_fn, query)
-    
+
     categories = ['Clarity', 'Novelty', 'Rigor', 'Reproducibility', 'Applicability']
     fig = go.Figure()
     scores_found = re.findall(r'(\d+)/10', response)
-    
+
     if len(scores_found) >= len(doc_names) * 5:
         for i, doc in enumerate(doc_names):
-            doc_scores = [int(s) for s in scores_found[i*5:(i+1)*5]]
+            doc_scores = [int(s) for s in scores_found[i * 5:(i + 1) * 5]]
             fig.add_trace(go.Scatterpolar(
                 r=doc_scores + [doc_scores[0]],
                 theta=categories + [categories[0]],
                 fill='toself',
-                name=doc
+                name=doc,
             ))
-            
         fig.update_layout(
-            polar=dict(
-                radialaxis=dict(visible=True, range=[0, 10]),
-                bgcolor="rgba(0,0,0,0)"
-            ),
+            polar=dict(radialaxis=dict(visible=True, range=[0, 10]), bgcolor="rgba(0,0,0,0)"),
             showlegend=True,
             template="plotly_dark",
             paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)"
+            plot_bgcolor="rgba(0,0,0,0)",
         )
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("AI generated detailed ratings below:")
         st.markdown(response)
 
+
 def abstract_comparison_card(user_input_fn, doc_names):
-    st.markdown("### 📝 Standardized Abstract Comparison")
-    query = "Summarize each document in exactly this format: Problem Statement, Proposed Solution, Methodology, Results, Conclusion. Keep each field to 2 sentences max."
+    st.markdown("### 📝 Standardised Abstract Comparison")
+    _doc_chips(doc_names)
+    n = len(doc_names)
+    docs_clause = ", ".join(f'"{d}"' for d in doc_names)
+    query = (
+        f"Summarise each of the {n} documents ({docs_clause}) using exactly this "
+        "five-field format — start each section with the document name on its own line "
+        "followed by: Problem Statement, Proposed Solution, Methodology, Results, "
+        "Conclusion (2 sentences max each). Separate documents with a blank line."
+    )
     response = _get_ai_response(user_input_fn, query)
-    
-    cols = st.columns(len(doc_names))
-    for i, doc in enumerate(doc_names):
-        with cols[i]:
-            st.markdown(f"#### {doc}")
-            st.code(response, language="markdown")
+
+    # Try to split the response by document name for side-by-side columns
+    if len(doc_names) > 1:
+        # Look for each doc name as a heading inside the response
+        import re as _re
+        sections: list[str] = []
+        remaining = response
+        for i, doc in enumerate(doc_names):
+            # Case-insensitive search for the document name in the text
+            pattern = _re.escape(doc.replace(".pdf", "").replace(".docx", ""))
+            parts = _re.split(pattern, remaining, flags=_re.IGNORECASE, maxsplit=1)
+            if len(parts) == 2:
+                if i > 0:
+                    sections.append(parts[0].strip())
+                remaining = parts[1]
+        sections.append(remaining.strip())   # last section
+
+        if len(sections) == len(doc_names):
+            cols = st.columns(len(doc_names))
+            for i, (doc, section) in enumerate(zip(doc_names, sections)):
+                with cols[i]:
+                    st.markdown(f"**{doc}**")
+                    st.code(section.strip(), language="markdown")
+            return
+
+    # Fallback: single unified panel
+    st.markdown(response)
 
 def chunk_heatmap(total_chunks, retrieved_indices):
     if total_chunks == 0 or not retrieved_indices:
