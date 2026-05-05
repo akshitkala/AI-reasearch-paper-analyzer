@@ -1,69 +1,53 @@
-# Research Paper Analyzer
+# 🔬 Research Paper Analyzer (AI-Powered)
 
-**Research Paper Analyzer** is a tool designed to extract and analyze key concepts from research papers in PDF format using two different processing pipelines. The tool leverages state-of-the-art AI models to provide insightful responses based on the content of the research papers.
+A premium, modern web application that allows you to upload and chat with multiple Research Papers (PDF & DOCX). Powered by **Google Gemini 2.5/3.1** and **LangChain**, this tool uses RAG (Retrieval-Augmented Generation) to provide accurate, context-aware answers from your documents.
 
-## Features
+## ✨ Features
+- **Modern UI/UX**: Premium dark theme with glassmorphism, Lottie animations, and a sleek chat interface.
+- **Multi-Format Support**: Analyze both `.pdf` and `.docx` files simultaneously.
+- **Interactive Chat**: Natural conversation flow with AI that remembers context.
+- **Document Insights**: Real-time statistics and analysis status.
+- **Robust Processing**: Smart batched embeddings with rate-limit protection.
+- **FAISS Vector Store**: High-performance local vector database for fast similarity search.
 
-- Extracts text from PDF documents.
-- Analyzes key concepts using two distinct pipelines.
-- Provides different approaches to understanding and summarizing research papers.
-- Streamlit-based interface for ease of use.
+## 🚀 Getting Started
 
-## Installation
+### 1. Prerequisites
+- Python 3.10+
+- A Google Gemini API Key (get one at [Google AI Studio](https://aistudio.google.com/))
 
-1. **Clone the repository**:
-    ```bash
-    git clone https://github.com/Aopandey/Research-Paper-Analyzer.git
-    cd Research-Paper-Analyzer
-    ```
-
-2. **Install dependencies**:
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-## Usage
-
-To run the Streamlit app, use one of the following commands depending on the pipeline you want to use:
-
+### 2. Installation
 ```bash
-streamlit run src/pipeline_1.py  # For Pipeline 1 (LangChain-based)
-streamlit run src/pipeline_2.py  # For Pipeline 2 (ChromaDB-based)
+# Clone the repository
+git clone <repository-url>
+cd Research-Paper-Analyzer
+
+# Install dependencies
+pip install -r requirements.txt
 ```
 
-## Example Query
-**Query :** "Tell me all the key concepts mentioned in the paper."
+### 3. Configuration
+Create a `.env.local` file in the root directory and add your API key:
+```text
+GOOGLE_API_KEY=your_actual_key_here
+```
 
-## Pipeline Differences
-This project includes two distinct pipelines for analyzing research papers:
+### 4. Run the App
+```bash
+streamlit run src/pipeline_1.py
+```
 
-#### Pipeline 1 (LangChain-based with FAISS)-
+## 🛠️ Technology Stack
+- **Frontend**: Streamlit (with Custom CSS)
+- **LLM**: Google Gemini 2.5-Flash
+- **Embeddings**: Google Gemini-Embedding-2
+- **Orchestration**: LangChain
+- **Vector Database**: FAISS
+- **Document Parsing**: pypdf, python-docx
 
-**Approach:** This pipeline uses FAISS for vector search combined with Google Generative AI for querying.
+## 🛡️ Security
+- API keys are managed via environment variables (`.env.local`).
+- FAISS index is stored locally on your machine.
 
-**Output:** The results from this pipeline are more detailed and expansive, providing an in-depth summary of the key concepts extracted from the entire document.
-
-
-
-#### Pipeline 2 (ChromaDB-based)-
-
-**Approach:** This pipeline leverages ChromaDB to search and retrieve relevant chunks of text based on the query, which are then processed by Google Generative AI.
-
-**Output:** The results from this pipeline are more concise, focusing on the core aspects of the research paper, specifically on technical details like model architecture and specific AI techniques.
-
-
-## Observations:
-
-**Pipeline 1** provides a broader context and more comprehensive insights, which is useful when looking for a general understanding or when the paper covers diverse topics, as seen in the detailed summary of Llama 3.
-
-**Pipeline 2** offers more targeted results, which can be beneficial when the focus is on specific technical details or when querying very specific concepts, such as the focus on the Transformer model and its components.
-
-## Example
-
-Below are screenshots showing the outputs of both pipelines for the query "Tell me all the key concepts mentioned in the paper":
-
-**Pipeline 1 (LangChain-based):**
-![pipeline_1.PNG](examples/pipeline_1.PNG)
-
-**Pipeline 2 (ChromaDB-based):**
-![pipeline_2.PNG](examples/pipeline_2.PNG)
+## 📄 License
+This project is licensed under the MIT License.
