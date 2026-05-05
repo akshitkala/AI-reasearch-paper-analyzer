@@ -1,3 +1,54 @@
-venv
-faiss_index
+# ── Virtual environments ─────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ── Python cache & build artifacts ───────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.spec
+
+# ── FAISS vector index ────────────────────────────────────────────────────────
+faiss_index/
+
+# ── Environment / secrets ─────────────────────────────────────────────────────
 .env
+.env.local
+.env.*.local
+# Keep the example file so contributors know what vars are needed
+!.env.example
+
+# ── Streamlit ─────────────────────────────────────────────────────────────────
+.streamlit/secrets.toml
+.streamlit/config.toml
+
+# ── Jupyter / IPython ─────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── Testing & coverage ────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ── Editor & IDE ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ── OS artifacts ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Logs & temp files ─────────────────────────────────────────────────────────
+*.log
+*.tmp
+*.bak
